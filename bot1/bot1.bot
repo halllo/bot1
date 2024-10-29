@@ -1,0 +1,19 @@
+{
+    "name": "bot1",
+    "description": "",
+    "services": [
+        {
+            "type": "endpoint",
+            "name": "http://localhost:5144/api/messages",
+            "id": "8108f3f0-9637-11ef-973f-ad1be6484bcd",
+            "appId": "",
+            "appPassword": "",
+            "tenantId": "",
+            "endpoint": "http://localhost:5144/api/messages"
+        }
+    ],
+    "padlock": "",
+    "version": "2.0",
+    "path": "D:\\bot1\\bot1\\bot1.bot",
+    "overrides": null
+}
