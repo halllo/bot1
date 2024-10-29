@@ -15,13 +15,17 @@ builder.Services.AddTransient<IBot, EchoBot>();
 
 var app = builder.Build();
 
+app.UseSwagger();
+app.UseSwaggerUI();
+
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseDeveloperExceptionPage();
 }
-
-//app.UseHttpsRedirection();
+else
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseDefaultFiles();
 
