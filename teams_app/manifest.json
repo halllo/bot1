@@ -1,0 +1,55 @@
+{
+    "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+    "version": "1.0.0",
+    "manifestVersion": "1.17",
+    "id": "2bc851e2-1c3b-4659-a313-ea9b54138a73",
+    "name": {
+      "short": "bot1",
+      "full": "bot1"
+    },
+    "developer": {
+      "name": "mnsdc",
+      "mpnId": "",
+      "websiteUrl": "https://bot1-backend-ayhgfpd0a9d9a7hr.germanywestcentral-01.azurewebsites.net/",
+      "privacyUrl": "https://bot1-backend-ayhgfpd0a9d9a7hr.germanywestcentral-01.azurewebsites.net/",
+      "termsOfUseUrl": "https://bot1-backend-ayhgfpd0a9d9a7hr.germanywestcentral-01.azurewebsites.net/"
+    },
+    "description": {
+      "short": "Experimental stuff within Teams.",
+      "full": "Experimental stuff within Teams."
+    },
+    "icons": {
+      "outline": "outline.png",
+      "color": "color.png"
+    },
+    "accentColor": "#FFFFFF",
+    "staticTabs": [
+      {
+        "entityId": "conversations",
+        "scopes": [
+          "personal"
+        ]
+      },
+      {
+        "entityId": "about",
+        "scopes": [
+          "personal"
+        ]
+      }
+    ],
+    "bots": [
+      {
+        "botId": "a5da40f2-6c4c-4a38-8ec4-9c63a98c105c",
+        "scopes": [
+          "personal",
+          "team",
+          "groupChat"
+        ],
+        "isNotificationOnly": false,
+        "supportsCalling": false,
+        "supportsVideo": false,
+        "supportsFiles": false
+      }
+    ],
+    "validDomains": []
+  }
