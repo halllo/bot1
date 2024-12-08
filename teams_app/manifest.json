@@ -1,6 +1,6 @@
 {
     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "manifestVersion": "1.17",
     "id": "2bc851e2-1c3b-4659-a313-ea9b54138a73",
     "name": {
@@ -51,5 +51,14 @@
         "supportsFiles": false
       }
     ],
-    "validDomains": []
+    "permissions": [
+      "identity",
+      "messageTeamMembers"
+    ],
+    "validDomains": [
+      "token.botframework.com",
+      "europe.token.botframework.com",
+      "login.microsoftonline.com",
+      "identityserver-dghzawaudva6ewgb.germanywestcentral-01.azurewebsites.net"
+    ]
   }

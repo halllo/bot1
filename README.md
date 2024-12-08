@@ -34,3 +34,11 @@ devtunnel host -p 7106 --protocol https -a
 ```
 
 Now we can interact with the bot via teams or webchat and debug it within Visual Studio locally.
+
+## Remote Authentication
+
+Add OAuth 2.0 authentication and settings like <https://stackoverflow.com/a/77832960>.
+
+We use the [experimental IdentityServer](https://identityserver-dghzawaudva6ewgb.germanywestcentral-01.azurewebsites.net) from [PermissionedNotes](https://github.com/halllo/PermissionedNotes).
+
+At the moment it does not work yet (invalid request). So we need to see IdentityServer logs to figure out the problem...
