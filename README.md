@@ -31,7 +31,8 @@ we can reference the [code](https://github.com/microsoft/botbuilder-dotnet) of i
 
 Once the debugging session has started, we can open a [devtunnel](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/get-started?tabs=windows).
 
-```powershell 
+```powershell
+# devtunnel login -d
 devtunnel host -p 7106 --protocol https -a
 ```
 

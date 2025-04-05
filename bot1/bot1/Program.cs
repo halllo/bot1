@@ -1,8 +1,11 @@
+using AgentDo;
+using AgentDo.OpenAI;
 using bot1;
 using bot1.Dialogs;
 using Microsoft.Bot.Builder;
 using Microsoft.Bot.Builder.Integration.AspNet.Core;
 using Microsoft.Bot.Connector.Authentication;
+using OpenAI.Chat;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +21,18 @@ builder.Services.AddSingleton<ConversationState>();
 builder.Services.AddSingleton<MainDialog>();
 builder.Services.AddTransient<IBot, AuthBot<MainDialog>>();
 
+var config = builder.Configuration;
+builder.Services.AddSingleton(sp => new ChatClient(
+	model: "gpt-4o",
+	apiKey: config["OPENAI_API_KEY"]!));
+
+builder.Services.AddSingleton<IAgent, OpenAIAgent>();
+builder.Services.Configure<OpenAIAgentOptions>(o =>
+{
+	o.Temperature = 0.0f;
+	o.SystemPrompt = "You are a helpful assistant. When asked what you can do, please respond with the list of tools available to you.";
+});
+
 
 var app = builder.Build();
 
@@ -26,11 +41,11 @@ app.UseSwaggerUI();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseDeveloperExceptionPage();
+	app.UseDeveloperExceptionPage();
 }
 else
 {
-    app.UseHttpsRedirection();
+	app.UseHttpsRedirection();
 }
 
 app.UseDefaultFiles();
