@@ -13,6 +13,7 @@ namespace bot1.Dialogs
 		protected readonly ILogger Logger;
 
 		record ConversationData(string Context);
+		record ConversationPreviousMessages(DateTimeOffset LastResponse, AgentDo.Message[] Messages);
 
 		public MainDialog(IConfiguration configuration, IAgent agent, ILogger<MainDialog> logger, ConversationState conversationState)
 			: base(nameof(MainDialog), configuration["ConnectionName"]!)
@@ -20,6 +21,7 @@ namespace bot1.Dialogs
 			Logger = logger;
 
 			var conversationStateAccessors = conversationState.CreateProperty<ConversationData>(nameof(ConversationData));
+			var conversationPreviousMessagesAccessors = conversationState.CreateProperty<ConversationPreviousMessages>(nameof(ConversationPreviousMessages));
 
 			AddDialog(new OAuthPrompt(
 				nameof(OAuthPrompt),
@@ -75,27 +77,47 @@ namespace bot1.Dialogs
 						var ask = stepContext.Values["ask"] as string;
 						if (!string.IsNullOrEmpty(ask))
 						{
+							var toolUsed = false;
+							var forgetPreviousMessages = false;
+							var previousMessagesRemembered = await conversationPreviousMessagesAccessors.GetAsync(stepContext.Context);
+							var previousMessages = previousMessagesRemembered?.LastResponse > DateTimeOffset.UtcNow.AddMinutes(-5)
+								? (previousMessagesRemembered.Messages.Length > 10
+									? [.. previousMessagesRemembered.Messages.Where(m => m.Role == "System"), .. previousMessagesRemembered.Messages.TakeLast(10)]
+									: previousMessagesRemembered.Messages)
+								: [];
+
 							var agentMessages = await agent.Do(
-								task: new AgentDo.Content.Prompt(ask),
+								task: new AgentDo.Content.Prompt(ask, previousMessages),
 								tools:
 								[
 									Tool.From([Description("Get access token claims.")] async (Tool.Context context) =>
 									{
 										context.Cancelled = true;
+										toolUsed = true;
 										var claims = jwt.Claims.Select(c => new { c.Type, c.Value });
 										var claimsJson = JsonSerializer.Serialize(claims, new JsonSerializerOptions { WriteIndented = true });
 										var responseText = $"Here are your claims:\n\n<pre>{claimsJson}</pre>";
 										await stepContext.Context.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
 									}),
+									Tool.From([Description("Forget previous messages.")] async (Tool.Context context) =>
+									{
+										context.Cancelled = true;
+										toolUsed = true;
+										forgetPreviousMessages = true;
+										var responseText = $"Forgotten.";
+										await stepContext.Context.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
+									}),
 									Tool.From([Description("Remember context.")] async (string ctx, Tool.Context context) =>
 									{
 										context.Cancelled = true;
+										toolUsed = true;
 										await conversationStateAccessors.SetAsync(stepContext.Context, new ConversationData(ctx));
 										await stepContext.Context.SendActivityAsync(MessageFactory.Text($"Context saved: {ctx}"), cancellationToken);
 									}),
 									Tool.From([Description("Get remembered context.")] async (Tool.Context context) =>
 									{
 										context.Cancelled = true;
+										toolUsed = true;
 										var remembered = await conversationStateAccessors.GetAsync(stepContext.Context);
 										if (remembered != null)
 										{
@@ -108,9 +130,11 @@ namespace bot1.Dialogs
 									}),
 								]);
 
-							if (!agentMessages.Any(m => m.ToolCalls?.Any() ?? false))
+							await conversationPreviousMessagesAccessors.SetAsync(stepContext.Context, new ConversationPreviousMessages(DateTimeOffset.UtcNow, forgetPreviousMessages ? [] : [.. agentMessages]));
+							
+							if (!toolUsed)
 							{
-								var agentResponse = agentMessages.SkipWhile(m => m.Role != "Assistant").Select(m => m.Text).FirstOrDefault();
+								var agentResponse = agentMessages.Skip(previousMessages.Length).SkipWhile(m => m.Role != "Assistant").Select(m => m.Text).FirstOrDefault();
 								if (!string.IsNullOrWhiteSpace(agentResponse))
 								{
 									await stepContext.Context.SendActivityAsync(MessageFactory.Text(agentResponse), cancellationToken);
