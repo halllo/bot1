@@ -30,7 +30,6 @@ builder.Services.AddSingleton<IAgent, OpenAIAgent>();
 builder.Services.Configure<OpenAIAgentOptions>(o =>
 {
 	o.Temperature = 0.0f;
-	o.SystemPrompt = "You are a helpful assistant. When asked what you can do, please respond with the list of tools available to you.";
 });
 
 
