@@ -198,10 +198,10 @@ namespace bot1.Dialogs
 					}
 					else
 					{
-						// The user rejected the tool use, so we need to remove the last message that was a tool call.
+						// The user rejected the tool use, so we need to close the open tool call.
 						var updatedPreviousMessages = new ConversationPreviousMessages(
 							LastResponse: DateTimeOffset.UtcNow,
-							Messages: previousMessagesRemembered.Messages.SkipLast(1).ToArray(),
+							Messages: approvable != null ? [..previousMessagesRemembered.Messages, new Message { Role = "Tool", ToolResults = [ new Message.ToolResult { Id = approvable.ToolUseId, Output = "tool invocation rejected" } ] }] : [],
 							PendingToolUsesJson: null);
 						await conversationPreviousMessagesAccessors.SetAsync(stepContext.Context, updatedPreviousMessages, cancellationToken);
 						await stepContext.Context.SendActivityAsync(MessageFactory.Text("Invocation rejected. Dialog ends."), cancellationToken);
