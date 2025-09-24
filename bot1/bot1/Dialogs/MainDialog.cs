@@ -13,7 +13,7 @@ namespace bot1.Dialogs
 		protected readonly ILogger Logger;
 
 		record ConversationData(string Context);
-		record ConversationPreviousMessages(DateTimeOffset LastResponse, Message[] Messages, string? PendingToolUsesJson);
+		record ConversationHistory(DateTimeOffset LastResponse, AgentResult AgentResult);
 
 		public MainDialog(IConfiguration configuration, IAgent agent, ILogger<MainDialog> logger, ConversationState conversationState)
 			: base(nameof(MainDialog), configuration["ConnectionName"]!)
@@ -21,7 +21,7 @@ namespace bot1.Dialogs
 			Logger = logger;
 
 			var conversationStateAccessors = conversationState.CreateProperty<ConversationData>(nameof(ConversationData));
-			var conversationPreviousMessagesAccessors = conversationState.CreateProperty<ConversationPreviousMessages>(nameof(ConversationPreviousMessages));
+			var conversationHistoryAccessors = conversationState.CreateProperty<ConversationHistory>(nameof(ConversationHistory));
 
 			AddDialog(new OAuthPrompt(
 				nameof(OAuthPrompt),
@@ -81,20 +81,15 @@ namespace bot1.Dialogs
 							var forgetPreviousMessages = false;
 
 							// Retrieve the previous messages and pending tool uses from the conversation state.
-							var previousMessagesRemembered = await conversationPreviousMessagesAccessors.GetAsync(stepContext.Context);
-							var previousMessages = previousMessagesRemembered?.LastResponse > DateTimeOffset.UtcNow.AddMinutes(-5) && (previousMessagesRemembered?.Messages.Any() ?? false)
-								? (previousMessagesRemembered.Messages.Length > 20
-									? [..previousMessagesRemembered.Messages.Where(m => m.Role == "System"), ..previousMessagesRemembered.Messages.TakeLast(10)]
-									: previousMessagesRemembered.Messages)
-								: [systemPrompt];
-							var pendingToolUses = string.IsNullOrWhiteSpace(previousMessagesRemembered?.PendingToolUsesJson) ? null : JsonSerializer.Deserialize<AgentResult.PendingToolUsesContext?>(previousMessagesRemembered.PendingToolUsesJson);
+							var history = await conversationHistoryAccessors.GetAsync(stepContext.Context);
+							var previousResult = history?.LastResponse > DateTimeOffset.UtcNow.AddMinutes(-5) ? null : history?.AgentResult;
 
 							// Invoke the agent.
 							var result = await agent.Do(
-								task: new AgentDo.Content.Prompt(ask, new AgentResult { Messages = [..previousMessages], PendingToolUses = pendingToolUses }),
+								task: new AgentDo.Content.Prompt(ask, previousResult),
 								tools:
 								[
-									Tool.From([Description("Get access token claims.")] async (Tool.Context context) =>
+									Tool.From([Description("Get access token claims (users identity).")] async (Tool.Context context) =>
 									{
 										context.Cancelled = true;
 										context.RememberToolResultWhenCancelled = true;
@@ -142,9 +137,7 @@ namespace bot1.Dialogs
 								]);
 
 							// Update the conversation state with the new messages and pending tool uses.
-							var agentMessages = result.Messages;
-							var pendingToolUsesJson = result.PendingToolUses != null ? JsonSerializer.Serialize(result.PendingToolUses) : null;
-							await conversationPreviousMessagesAccessors.SetAsync(stepContext.Context, new ConversationPreviousMessages(DateTimeOffset.UtcNow, forgetPreviousMessages ? [] : [.. agentMessages], pendingToolUsesJson), cancellationToken);
+							await conversationHistoryAccessors.SetAsync(stepContext.Context, new ConversationHistory(DateTimeOffset.UtcNow, result), cancellationToken);
 
 							// If the agent wants to use an approvable tool, we need to include the human in the loop.
 							if (result.NeedsApprovalToContinue)
@@ -154,7 +147,7 @@ namespace bot1.Dialogs
 							// If the agent didn't use a tool, we can just return the response.
 							else if (!toolUsed)
 							{
-								var agentResponse = agentMessages.Skip(previousMessages.Length).SkipWhile(m => m.Role != "Assistant").Select(m => m.Text).FirstOrDefault();
+								var agentResponse = result.Messages.Last().Text;
 								if (!string.IsNullOrWhiteSpace(agentResponse))
 								{
 									await stepContext.Context.SendActivityAsync(MessageFactory.Text(agentResponse), cancellationToken);
@@ -181,29 +174,33 @@ namespace bot1.Dialogs
 				async (WaterfallStepContext stepContext, CancellationToken cancellationToken) =>
 				{
 					var confirmed = (bool)stepContext.Result;
-					var previousMessagesRemembered = await conversationPreviousMessagesAccessors.GetAsync(stepContext.Context);
-					var pendingToolUses = string.IsNullOrWhiteSpace(previousMessagesRemembered.PendingToolUsesJson) ? null : JsonSerializer.Deserialize<AgentResult.PendingToolUsesContext?>(previousMessagesRemembered.PendingToolUsesJson);
-					var approvable = pendingToolUses?.Uses.SkipWhile((ToolUsing.ToolUse u) => u.ToolResult != null).FirstOrDefault();
+					var history = await conversationHistoryAccessors.GetAsync(stepContext.Context);
+					var approvable = history?.AgentResult.Approvable;
 					if (confirmed && approvable != null)
 					{
 						// The user confirmed the tool use, so we can proceed with the tool call be starting the dialog again.
 						approvable.Approved = true;
 
-						var updatedPreviousMessages = new ConversationPreviousMessages(
-							LastResponse: DateTimeOffset.UtcNow,
-							Messages: previousMessagesRemembered.Messages,
-							PendingToolUsesJson: pendingToolUses != null ? JsonSerializer.Serialize(pendingToolUses) : null);
-						await conversationPreviousMessagesAccessors.SetAsync(stepContext.Context, updatedPreviousMessages, cancellationToken);
+						var updatedHistory = new ConversationHistory(DateTimeOffset.UtcNow, history!.AgentResult);
+						await conversationHistoryAccessors.SetAsync(stepContext.Context, updatedHistory, cancellationToken);
 						return await stepContext.BeginDialogAsync(nameof(WaterfallDialog), null, cancellationToken);
 					}
 					else
 					{
 						// The user rejected the tool use, so we need to close the open tool call.
-						var updatedPreviousMessages = new ConversationPreviousMessages(
+						var updatedPreviousMessages = new ConversationHistory(
 							LastResponse: DateTimeOffset.UtcNow,
-							Messages: approvable != null ? [..previousMessagesRemembered.Messages, new Message { Role = "Tool", ToolResults = [ new Message.ToolResult { Id = approvable.ToolUseId, Output = "tool invocation rejected" } ] }] : [],
-							PendingToolUsesJson: null);
-						await conversationPreviousMessagesAccessors.SetAsync(stepContext.Context, updatedPreviousMessages, cancellationToken);
+							AgentResult: new AgentResult
+							{
+								Messages = [
+									..history!.AgentResult.Messages,
+									approvable != null 
+										? new Message { Role = "Tool", ToolResults = [new Message.ToolResult { Id = approvable.ToolUseId, Output = "tool invocation rejected" }] }
+										: new Message { Role = "Assistant", Text = "Understood. Not invoking the tool." }
+								],
+								PendingToolUses = null,
+							});
+						await conversationHistoryAccessors.SetAsync(stepContext.Context, updatedPreviousMessages, cancellationToken);
 						await stepContext.Context.SendActivityAsync(MessageFactory.Text("Invocation rejected. Dialog ends."), cancellationToken);
 					}
 
