@@ -119,9 +119,9 @@ namespace bot1.Dialogs
 								]);
 
 							// Update the conversation state with the new messages and pending tool uses.
-							result.Agent = null!;//because cannot be serialized by json.net
-							result.Task = null!;//because cannot be serialized by json.net
-							result.Tools = null!;//because cannot be serialized by json.net
+							result.Agent = null!;// Some things cannot be serialized by newtonsoft.json
+							result.Task = null!;
+							result.Tools = null!;
 							result.Messages = forgetPreviousMessages ? [systemPrompt] : result.Messages;
 							await conversationHistoryAccessors.SetAsync(stepContext.Context, new ConversationHistory(DateTimeOffset.UtcNow, result), cancellationToken);
 
