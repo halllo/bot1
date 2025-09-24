@@ -82,7 +82,7 @@ namespace bot1.Dialogs
 
 							// Retrieve the previous messages and pending tool uses from the conversation state.
 							var history = await conversationHistoryAccessors.GetAsync(stepContext.Context);
-							var previousResult = history?.LastResponse > DateTimeOffset.UtcNow.AddMinutes(-5) ? null : history?.AgentResult;
+							var previousResult = history?.LastResponse > DateTimeOffset.UtcNow.AddMinutes(-5) ? history?.AgentResult : new AgentResult { Messages = [systemPrompt] };
 
 							// Invoke the agent.
 							var result = await agent.Do(
@@ -108,35 +108,21 @@ namespace bot1.Dialogs
 										var responseText = $"{context.Text}\n\n<pre>forgotten</pre>";
 										await stepContext.Context.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
 									}, requireApproval: true),
-									Tool.From([Description("Remember context.")] async (string ctx, Tool.Context context) =>
+									Tool.From([Description("Brain inspection.")] async (Tool.Context context) =>
 									{
 										context.Cancelled = true;
 										context.RememberToolResultWhenCancelled = true;
 										toolUsed = true;
-										await conversationStateAccessors.SetAsync(stepContext.Context, new ConversationData(ctx), cancellationToken);
-										var responseText = $"{context.Text}\n\n<pre>Saved '{ctx}'</pre>";
+										var responseText = $"{context.Text}\n\n<pre>{JsonSerializer.Serialize(previousResult?.Messages)}</pre>";
 										await stepContext.Context.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
-									}),
-									Tool.From([Description("Get remembered context.")] async (Tool.Context context) =>
-									{
-										context.Cancelled = true;
-										context.RememberToolResultWhenCancelled = true;
-										toolUsed = true;
-										var remembered = await conversationStateAccessors.GetAsync(stepContext.Context);
-										if (remembered != null)
-										{
-											var responseText = $"{context.Text}\n\n<pre>{remembered.Context}</pre>";
-											await stepContext.Context.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
-										}
-										else
-										{
-											var responseText = $"{context.Text}\n\n<pre>No context remembered yet.</pre>";
-											await stepContext.Context.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
-										}
 									}),
 								]);
 
 							// Update the conversation state with the new messages and pending tool uses.
+							result.Agent = null!;//because cannot be serialized by json.net
+							result.Task = null!;//because cannot be serialized by json.net
+							result.Tools = null!;//because cannot be serialized by json.net
+							result.Messages = forgetPreviousMessages ? [systemPrompt] : result.Messages;
 							await conversationHistoryAccessors.SetAsync(stepContext.Context, new ConversationHistory(DateTimeOffset.UtcNow, result), cancellationToken);
 
 							// If the agent wants to use an approvable tool, we need to include the human in the loop.
@@ -194,7 +180,7 @@ namespace bot1.Dialogs
 							{
 								Messages = [
 									..history!.AgentResult.Messages,
-									approvable != null 
+									approvable != null
 										? new Message { Role = "Tool", ToolResults = [new Message.ToolResult { Id = approvable.ToolUseId, Output = "tool invocation rejected" }] }
 										: new Message { Role = "Assistant", Text = "Understood. Not invoking the tool." }
 								],
